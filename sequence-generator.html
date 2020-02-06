@@ -1,0 +1,260 @@
+<!--
+  Copyright 2020, Bart Butenaers
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+  http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<script type="text/javascript">
+    RED.nodes.registerType('sequence-generator',{
+        category: 'function',
+        color: '#E9967A',
+        defaults: {
+            name: {value:""},      
+            interval: {value: 500, required: true, validate:RED.validators.number()},
+            maximumTickCount: {value: null},
+            outputType: {value: "range"},
+            intervalunit: {value: "msecs"},
+            stepSize: { value: 10, validate:RED.validators.number()},
+            stepUnit: {value: "fixed"},
+            minValue: { value: 0, validate:RED.validators.number()},
+            maxValue: { value: 100, validate:RED.validators.number()},
+            operation: { value:"operation", validate: RED.validators.typedInput("operationType")},
+            operationType: {value: "incr"},
+            algorithm: {value: "uuidv1"},
+            fixedValue: {value: 1, validate: RED.validators.typedInput("fixedValueType")},
+            fixedValueType: {value: "num"},
+            valueList: {value: [], validate: RED.validators.typedInput("valueListType")},
+            valueListType: {value: "json"},
+            loopType: {value: "repeat"},
+            inputField: {value: "payload", required: true, validate: RED.validators.typedInput("inputFieldType")},
+            inputFieldType: {value: "msg"},
+            outputField: {value: "payload", required: true, validate: RED.validators.typedInput("outputFieldType")},
+            outputFieldType: {value: "msg"},
+            startCommand: {value: "ON", required: true, validate: RED.validators.typedInput("startCommandType")},
+            startCommandType: {value: "str"},
+            stopCommand: {value: "OFF", required: true, validate: RED.validators.typedInput("stopCommandType")},
+            stopCommandType: {value: "str"}
+        },        
+        inputs:1,
+        outputs:1,
+        icon: "font-awesome/fa-barcode",
+        label: function() {
+            return this.name || "Sequence generator";
+        },
+        oneditprepare: function() {
+            // When an output type is selected, show only the corresponding settings
+            $("#node-input-outputType").change(function() {
+                var outputType = this.value;
+                
+                $(".number-range-row").hide();
+                $(".random-between-row").hide();
+                $(".fixed-value-row").hide();
+                $(".unique-id-row").hide();
+                $(".value-list-row").hide();
+                
+                switch(outputType) {
+                    case "range":
+                        $(".number-range-row").show();
+                        break;
+                    case "fixed":
+                        $(".fixed-value-row").show();
+                        break;
+                    case "random":
+                        $(".random-between-row").show();
+                        break;
+                    case "unique":
+                        $(".unique-id-row").show();
+                        break;
+                    case "list":
+                        $(".value-list-row").show();
+                        break;
+                }        
+            }); 
+            $("#node-input-outputType").change();
+
+            // Show a custom "Increment" option in the typedInput field
+            var incrementType = {
+                value: "incr",
+                label: "Increment",
+                hasValue: false // No input field at the right side
+            };
+
+            // Show a custom "Decrement" option in the typedInput field
+            var decrementType = {
+                value: "decr",
+                label: "Decrement",
+                hasValue: false // No input field at the right side
+            };
+
+            $('#node-input-operation').typedInput({
+                typeField: $("#node-input-operationType"),
+                types: [incrementType,decrementType,'msg']
+            });
+
+            $('#node-input-fixedValue').typedInput({
+                typeField: $("#node-input-fixedValueType"),
+                types: ['str','num','bool','json']
+            });
+
+            $('#node-input-valueList').typedInput({
+                typeField: $("#node-input-valueListType"),
+                types: ['json']
+            });
+
+            $('#node-input-inputField').typedInput({
+                typeField: $("#node-input-inputFieldType"),
+                types: ['msg']
+            });
+
+            $('#node-input-outputField').typedInput({
+                typeField: $("#node-input-outputFieldType"),
+                types: ['msg']
+            });
+
+            $('#node-input-startCommand').typedInput({
+                typeField: $("#node-input-startCommandType"),
+                types: ['str','num','bool']
+            });          
+
+            $('#node-input-stopCommand').typedInput({
+                typeField: $("#node-input-stopCommandType"),
+                types: ['str','num','bool']
+            });                  
+        }                 
+    });
+</script>
+
+<script type="text/x-red" data-template-name="sequence-generator">
+    <div class="form-row">
+        <label for="node-input-interval"><i class="fa fa-clock-o"></i> Interval</label>
+        <input type="number" id="node-input-interval" style="width:180px;">
+        <select id="node-input-intervalunit" style="width:120px;">
+            <option value="msecs">MilliSeconds</option>
+            <option value="secs">Seconds</option>
+            <option value="mins">Minutes</option>
+            <option value="hours">Hours</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-maximumTickCount"><i class="fa fa-hand-paper-o"></i> Max. count</label>
+        <input type="number" id="node-input-maximumTickCount" placeholder="Maximum count">
+    </div>
+    <br>
+    <div class="form-row">
+        <label for="node-input-outputType"><i class="fa fa-list"></i> Output type</label>
+        <select id="node-input-outputType">
+            <option value="range">Number range</option>
+            <option value="fixed">Fixed value</option>
+            <option value="random">Random number between</option>
+            <option value="unique">Unique id</option>
+            <option value="list">Value list</option>
+            <option value="none">None</option>
+        </select>
+    </div>
+    <div class="form-row number-range-row">
+        <label for="node-input-stepSize"><i class="fa fa-arrows-v"></i> Step size</label>
+        <input type="number" id="node-input-stepSize" style="width:180px;">
+        <select id="node-input-stepUnit" style="width:120px;">
+            <option value="fixed">Fixed</option>
+            <option value="perc">Percentage</option>
+        </select>
+    </div>
+    <div class="form-row number-range-row random-between-row">
+        <label for="node-input-minValue"><i class="fa fa-hand-o-down"></i> Min. value</label>
+        <input type="number" id="node-input-minValue" placeholder="MinValue">
+    </div>
+    <div class="form-row number-range-row random-between-row">
+        <label for="node-input-maxValue"><i class="fa fa-hand-o-up"></i> Max. value</label>
+        <input type="number" id="node-input-maxValue" placeholder="MaxValue">
+    </div>
+    <div class="form-row number-range-row">
+        <label style="padding-top: 8px" for="node-input-operation"><i class="fa fa-arrows-v"></i> Operation</label>
+        <input type="text" id="node-input-operation" style="width:70%">
+        <input type="hidden" id="node-input-operationType">
+    </div>
+    <div class="form-row value-list-row">
+        <label style="padding-top: 8px" for="node-input-valueList"><i class="fa fa-list-ol"></i> Values</label>
+        <input type="text" id="node-input-valueList" style="width:70%">
+        <input type="hidden" id="node-input-valueListType">
+    </div>
+    <div class="form-row value-list-row number-range-row">
+        <label for="node-input-loopType"><i class="fa fa-list"></i> Loop type</label>
+        <select id="node-input-loopType">
+            <option value="stop">Stop at end</option>
+            <option value="repeat">Repeat from begin</option>
+            <option value="back">Loop back at end</option>
+        </select>
+    </div>
+    <div class="form-row unique-id-row">
+        <label for="node-input-algorithm"><i class="fa fa-calculator"></i> Algorithm</label>
+        <select id="node-input-algorithm" style="width:120px;">
+            <option value="uuidv1">UUID v1</option>
+            <option value="uuidv4">UUID v4</option>
+        </select>
+    </div>
+    <div class="form-row fixed-value-row">
+        <label style="padding-top: 8px" for="node-input-fixedValue"><i class="fa fa-pencil-square-o"></i> Fixed value</label>
+        <input type="text" id="node-input-fixedValue" style="width:70%">
+        <input type="hidden" id="node-input-fixedValueType">
+    </div>
+    <br>
+    <div class="form-row">
+        <label style="padding-top: 8px" for="node-input-inputField"><i class="fa fa-sign-in"></i> Input field</label>
+        <input type="text" id="node-input-inputField" style="width:70%">
+        <input type="hidden" id="node-input-inputFieldType">
+    </div>
+    <div class="form-row">
+        <label style="padding-top: 8px" for="node-input-startCommand"><i class="fa fa-toggle-on"></i> Start cmd</label>
+        <input type="text" id="node-input-startCommand" style="width:70%">
+        <input type="hidden" id="node-input-startCommandType">
+    </div>
+    <div class="form-row">
+        <label style="padding-top: 8px" for="node-input-stopCommand"><i class="fa fa-toggle-off"></i> Stop cmd</label>
+        <input type="text" id="node-input-stopCommand" style="width:70%">
+        <input type="hidden" id="node-input-stopCommandType">
+    </div>
+    <br>
+    <div class="form-row">
+        <label style="padding-top: 8px" for="node-input-outputField"><i class="fa fa-sign-out"></i> Output field</label>
+        <input type="text" id="node-input-outputField" style="width:70%">
+        <input type="hidden" id="node-input-outputFieldType">
+    </div>
+    <br>
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="sequence-generator">
+    <p>A node for generating periodical sequences.</p>
+    <p><strong>Interval:</strong><br/>
+    The time interval between successive output messages.</p>
+    <p><strong>Max. count:</strong><br/>
+    When a number N is specified, the output sequence will be stopped automatically after N output messages.  When empty or zero, the output sequence will keep on going...</p>
+    <p><strong>Output type:</strong><br/>
+    A series of output types are available, to generate different kinds of sequences:
+    <ul>
+        <li><code>Number range</code> to output incremented/decremented numbers (with a specified step size) between a minimum and maximum value.</li>
+        <li><code>Fixed value</code> to output constant values.</li>
+        <li><code>Random number between</code> to output random numbers between a minimum and maximum value.</li>
+        <li><code>Unique id</code> to output unique GUIDS of a specified format.</li>
+        <li><code>Value list</code> to output the items from a predefined array of values.</li>
+        <li><code>None</code> to output clones of the original input message (i.e. to resend the input message).</li>
+    </ul>Depending on the output type, the related settings can be entered.</p>
+    <p><strong>Input field:</strong><br/>
+    The name of the field from the input message (e.g. <code>msg.control</code>), that will contain the start and stop commands.</p>
+    <p><strong>Start cmd:</strong><br/>
+    The command that will arrive (via the input field) to start a new output sequence.  For example "ON", "1", "true", ...</p>
+    <p><strong>Stop cmd:</strong><br/>
+    The command that will arrive (via the input field) to stop the current output sequence.  For example "OFF", "0", "false", ...</p>
+    <p><strong>Output field:</strong><br/>
+    The name of the field in the output message (e.g. <code>msg.payload</code>), where the sequence value needs to be stored.</p>    
+</script>
+
